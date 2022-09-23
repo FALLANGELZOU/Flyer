@@ -10,12 +10,8 @@ class t3 {
 fun main() {
     NodeFactory.createNode("1")
     val fileChannel = RandomAccessFile("kv.data", "rw").channel
-<<<<<<< HEAD
     val mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, 2048)
     mappedByteBuffer.put(1)
-=======
-    val mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 0, 1024)
-    println(mappedByteBuffer.get(2))
->>>>>>> p/sunnan/flyer/test/work
+
 
 }
