@@ -4,10 +4,10 @@ import java.io.RandomAccessFile
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
-class PhysicalDataHandler(kvName: String, size: Long) {
+class PhysicalDataHandler(kvName: String, val size: Long) {
     private val file = RandomAccessFile("$kvName.ekv", "rw")
     private val fileChannel = file.channel
-    private val mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 4, size)
+    private var mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, 4, size)
     var pos = 4
         set(value) {
             field = value
@@ -15,8 +15,8 @@ class PhysicalDataHandler(kvName: String, size: Long) {
         }
     val ptr: MappedByteBuffer get() = mappedByteBuffer.position(pos)
 
-    fun expand() {
-
+    fun expand(expandSize: Long) {
+        mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, pos.toLong(), size + expandSize)
     }
 
 

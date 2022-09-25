@@ -3,10 +3,11 @@ package flyer.easyKeyValue.physicalFile
 import flyer.easyKeyValue.Config
 import flyer.easyKeyValue.KVUtil.Bytes.toAsciiString
 import flyer.easyKeyValue.node.MemoryNode
+import java.io.File
 
-class Chunk(kvName: String) {
+class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
     private val mMap = mutableMapOf<String, MemoryNode>()
-    private val handler = PhysicalDataHandler("${kvName}_chunk", Config.CHUNK_DEFAULT_SIZE)
+    private val handler = PhysicalDataHandler("./EasyKV/${kvName}_chunk", chunkSize)
     private val stream = Stream(kvName)
 
     object StoreType{
@@ -71,6 +72,7 @@ class Chunk(kvName: String) {
         handler.pos += Config.INT_SIZE
     }
 
+
     /**
      * 有效位验证
      */
@@ -107,35 +109,4 @@ class Chunk(kvName: String) {
         }
     }
 
-    private fun printBytes(bytes: ByteArray) {
-        if (bytes.isEmpty()) {
-            println("++\n" +
-                    "||\n" +
-                    "++")
-            return
-        }
-        val strPre = StringBuffer()
-        strPre.append("+")
-        val strBytes = StringBuffer()
-        strBytes.append("|")
-
-        for(byte in bytes) {
-            strPre.append("--------+")
-
-            for (i in 7 downTo 0) {
-                strBytes.append((byte.toInt() shr i and 1))
-            }
-
-            strBytes.append("|")
-        }
-        println(strPre.toString())
-        println(strBytes.toString())
-        println(strPre.toString())
-    }
-}
-
-fun main() {
-    val a = Chunk("test")
-    // a.writeBool("page", true)
-    a.loadAll()
 }

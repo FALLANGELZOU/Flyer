@@ -9,7 +9,7 @@ import flyer.easyKeyValue.node.MemoryNode
  *
  */
 class Stream(kvName: String) {
-    private val handler = PhysicalDataHandler("${kvName}_stream", Config.STREAM_DEFAULT_SIZE)
+    private val handler = PhysicalDataHandler("./EasyKV/${kvName}_stream", Config.STREAM_DEFAULT_SIZE)
 
     /**
      * 写入字节，并返还首地址
@@ -17,6 +17,7 @@ class Stream(kvName: String) {
     fun writeBytes(len: Int, byteArray: ByteArray): Int {
         var totalBytes = getBlockNum(len) * Config.BLOCK_SIZE
         val currentPos = handler.pos
+        while(currentPos + totalBytes >= handler.size) handler.expand(Config.STREAM_DEFAULT_SIZE)
         handler.ptr.putInt(len)
         handler.pos += Config.INT_SIZE
         handler.ptr.put(byteArray)
@@ -68,15 +69,4 @@ class Stream(kvName: String) {
             println(a)
         }
     }
-}
-
-fun main() {
-    val a = Stream("test")
-    var str = "name is Efficient. MMKV uses mmap to keep memory synced with files, and protobuf to encode/decode values, making the most of Android to achieve the best performance.".toByteArray()
-    a.writeBytes(str.size, str)
-    str = "name".toByteArray()
-    a.writeBytes(str.size, str)
-    str = "making the most of Android to achieve the best performance.".toByteArray()
-    a.writeBytes(str.size, str)
-    a.readAll()
 }

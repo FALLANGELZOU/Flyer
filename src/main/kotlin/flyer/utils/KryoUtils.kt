@@ -18,25 +18,23 @@ object KryoUtils {
     }
 
     fun serialize(obj: Any): ByteArray {
-        val kryo = kryoPool.obtain() // 使用 Output 对象池会导致序列化重复的错误（getBuffer返回了Output对象的buffer引用）
-        try {
-            Output(1024, -1).use { opt ->
-                kryo.writeClassAndObject(opt, obj)
-                val byteArray = opt.buffer
-                opt.flush()
-                opt.close()
-                return byteArray
-            }
-        } finally {
-            kryoPool.free(kryo)
-        }
-    }
-
-    fun <T> deserialize(byteArray: ByteArray): T {
         val kryo = kryoPool.obtain()
         try {
-            Input(1024).use { opt ->
-                return kryo.readClassAndObject(opt) as T
+            Output(1024).use { opt ->
+                kryo.writeObject(opt, obj)
+                opt.flush()
+                return opt.toBytes()
+            }
+        } finally {
+            kryoPool.free(kryo)
+        }
+    }
+
+    fun <T> deserialize(byteArray: ByteArray, clazz: Class<T>): T {
+        val kryo = kryoPool.obtain()
+        try {
+            Input(byteArray).use { opt ->
+                return kryo.readObject(opt, clazz) as T
             }
         } finally {
             kryoPool.free(kryo)
@@ -44,14 +42,10 @@ object KryoUtils {
     }
 }
 
-class a() {
-    val name = "1"
-    val age = 1
-}
+
 fun main() {
-    val byteArray = KryoUtils.serialize(a())
-    println(byteArray.toString())
-    val b = KryoUtils.deserialize<a>(byteArray)
-    println(b.toString())
+    val byteArray =  KryoUtils.serialize(1)
+    val t = KryoUtils.deserialize(byteArray, Int::class.java)
+    println(t)
 }
 

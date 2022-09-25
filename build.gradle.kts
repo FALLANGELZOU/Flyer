@@ -15,7 +15,7 @@ repositories {
 dependencies {
     testImplementation(kotlin("test"))
     implementation("org.jetbrains.kotlin:kotlin-reflect:1.4.20")
-    implementation("com.esotericsoftware:kryo:5.2.0")
+    implementation("com.esotericsoftware:kryo:5.3.0")
 }
 
 

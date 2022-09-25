@@ -4,6 +4,33 @@ import java.text.SimpleDateFormat
 
 object KVUtil {
     object Bytes {
+
+        private fun printBytes(bytes: ByteArray) {
+            if (bytes.isEmpty()) {
+                println("++\n" +
+                        "||\n" +
+                        "++")
+                return
+            }
+            val strPre = StringBuffer()
+            strPre.append("+")
+            val strBytes = StringBuffer()
+            strBytes.append("|")
+
+            for(byte in bytes) {
+                strPre.append("--------+")
+
+                for (i in 7 downTo 0) {
+                    strBytes.append((byte.toInt() shr i and 1))
+                }
+
+                strBytes.append("|")
+            }
+            println(strPre.toString())
+            println(strBytes.toString())
+            println(strPre.toString())
+        }
+
         fun int2Byte4(num: Int): ByteArray {
             var byteArray = ByteArray(4)
             var highH = ((num shr 24) and 0xff).toByte()
