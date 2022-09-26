@@ -14,6 +14,8 @@ object Config {
 
     const val BLOCK_SIZE = 24
     const val INT_SIZE = 4
+    const val LONG_SIZE = 8
+
 
 }
 

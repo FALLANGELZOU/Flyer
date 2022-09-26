@@ -17,11 +17,11 @@ object KryoUtils {
         }
     }
 
-    fun serialize(obj: Any): ByteArray {
+    fun <T> serialize(obj: T): ByteArray {
         val kryo = kryoPool.obtain()
         try {
             Output(1024).use { opt ->
-                kryo.writeObject(opt, obj)
+                kryo.writeClassAndObject(opt, obj)
                 opt.flush()
                 return opt.toBytes()
             }
@@ -30,11 +30,11 @@ object KryoUtils {
         }
     }
 
-    fun <T> deserialize(byteArray: ByteArray, clazz: Class<T>): T {
+    fun deserialize(byteArray: ByteArray): Any {
         val kryo = kryoPool.obtain()
         try {
             Input(byteArray).use { opt ->
-                return kryo.readObject(opt, clazz) as T
+                return kryo.readClassAndObject(opt)
             }
         } finally {
             kryoPool.free(kryo)
@@ -43,9 +43,6 @@ object KryoUtils {
 }
 
 
-fun main() {
-    val byteArray =  KryoUtils.serialize(1)
-    val t = KryoUtils.deserialize(byteArray, Int::class.java)
-    println(t)
-}
+
+
 

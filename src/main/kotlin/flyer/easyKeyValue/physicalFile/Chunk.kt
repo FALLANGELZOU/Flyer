@@ -3,6 +3,7 @@ package flyer.easyKeyValue.physicalFile
 import flyer.easyKeyValue.Config
 import flyer.easyKeyValue.KVUtil.Bytes.toAsciiString
 import flyer.easyKeyValue.node.MemoryNode
+import flyer.utils.KryoUtils
 import java.io.File
 
 class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
@@ -13,6 +14,8 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
     object StoreType{
         const val BOOL = 0
         const val INT = 1
+        const val STRING = 2
+        const val ANY = 3
     }
 
     /**
@@ -40,6 +43,13 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
             StoreType.INT -> {
                 raw = raw or 0b00000001
             }
+            StoreType.STRING -> {
+                raw = raw or 0b00000010
+            }
+            StoreType.ANY -> {
+                raw = raw or 0b00000011
+            }
+
         }
 
         val keyBytes = key.toByteArray()
@@ -53,7 +63,7 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
      *  +--------+------------------------+--------------------------------+
      */
     fun writeInt(key: String, value: Int) {
-        val physicalKey = generatePhysicalKey(key, 1)
+        val physicalKey = generatePhysicalKey(key, StoreType.INT)
         handler.ptr.putInt(physicalKey)
         handler.pos += Config.INT_SIZE
         handler.ptr.putInt(value)
@@ -67,8 +77,41 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
      *  +--------+------------------------+
      */
     fun writeBool(key: String, value: Boolean) {
-        val physicalKey = generatePhysicalKey(key, 0, value)
+        val physicalKey = generatePhysicalKey(key, StoreType.BOOL, value)
         handler.ptr.putInt(physicalKey)
+        handler.pos += Config.INT_SIZE
+    }
+
+
+    /**
+     * 8 byte
+     *  +--------+------------------------+--------------------------------+
+     *  | tag    | index of key           | index of string in stream      |
+     *  +--------+------------------------+--------------------------------+
+     */
+    fun writeString(key: String, value: String) {
+        val physicalKey = generatePhysicalKey(key, StoreType.STRING)
+        handler.ptr.putInt(physicalKey)
+        handler.pos += Config.INT_SIZE
+        val bytes = value.toByteArray()
+        val index = stream.writeBytes(bytes.size, bytes)
+        handler.ptr.putInt(index)
+        handler.pos += Config.INT_SIZE
+    }
+
+    /**
+     * 8 byte
+     *  +--------+------------------------+--------------------------------+
+     *  | tag    | index of key           | index of any in stream         |
+     *  +--------+------------------------+--------------------------------+
+     */
+    fun <T> writeAny(key: String, value: T) {
+        val physicalKey = generatePhysicalKey(key, StoreType.ANY)
+        handler.ptr.putInt(physicalKey)
+        handler.pos += Config.INT_SIZE
+        val bytes = KryoUtils.serialize(value)
+        val index = stream.writeBytes(bytes.size, bytes)
+        handler.ptr.putInt(index)
         handler.pos += Config.INT_SIZE
     }
 
@@ -80,6 +123,9 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
         return (physicalKey shr 31 and 0x1) == 1
     }
 
+    /**
+     * 从key中获取数据类型
+     */
     private fun getStoreType(physicalKey: Int): Int {
         return physicalKey shr 24 and 0x0F
     }
@@ -102,6 +148,20 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
                     mMap[keyName] = MemoryNode(handler.ptr.getInt(p), position, StoreType.INT)
                     p += Config.INT_SIZE
                 }
+                StoreType.STRING -> {
+                    val index = handler.ptr.getInt(p)
+                    val bytes = stream.readBytes(index)
+                    val str = bytes.toAsciiString()
+                    mMap[keyName] = MemoryNode(str, position, StoreType.STRING)
+                    p += Config.INT_SIZE
+                }
+                StoreType.ANY -> {
+                    val index = handler.ptr.getInt(p)
+                    val bytes = stream.readBytes(index)
+                    val any = KryoUtils.deserialize(bytes)
+                    mMap[keyName] = MemoryNode(any, position, StoreType.ANY)
+                    p += Config.INT_SIZE
+                }
             }
         }
         for(item in mMap) {
@@ -110,3 +170,15 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
     }
 
 }
+
+class a() {
+    val tt = 1
+    val t2 = "2332321"
+}
+fun main() {
+    val chunk = Chunk("test")
+    chunk.writeAny("a", a() as Any)
+    chunk.writeBool("bool", true)
+    chunk.loadAll()
+}
+
