@@ -5,10 +5,10 @@ import flyer.easyKeyValue.KVUtil.Bytes.toAsciiString
 import flyer.easyKeyValue.node.MemoryNode
 import flyer.utils.KryoUtils
 import java.io.File
+import java.lang.Exception
 
-class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
-    private val mMap = mutableMapOf<String, MemoryNode>()
-    private val handler = PhysicalDataHandler("./EasyKV/${kvName}_chunk", chunkSize)
+class Chunk(private val kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
+    private var handler = PhysicalDataHandler("./EasyKV/${kvName}_chunk", chunkSize)
     private val stream = Stream(kvName)
 
     object StoreType{
@@ -49,9 +49,7 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
             StoreType.ANY -> {
                 raw = raw or 0b00000011
             }
-
         }
-
         val keyBytes = key.toByteArray()
         return raw shl 24 or stream.writeBytes(keyBytes.size, keyBytes)
     }
@@ -62,12 +60,24 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
      *  | tag    | index of key           | value of int                   |
      *  +--------+------------------------+--------------------------------+
      */
-    fun writeInt(key: String, value: Int) {
+    fun writeInt(key: String, value: Int): MemoryNode {
         val physicalKey = generatePhysicalKey(key, StoreType.INT)
+        val position = handler.pos
         handler.ptr.putInt(physicalKey)
         handler.pos += Config.INT_SIZE
         handler.ptr.putInt(value)
         handler.pos += Config.INT_SIZE
+        return MemoryNode(value, position, StoreType.INT)
+    }
+
+    fun reWriterInt(key: String, value: Int, position: Int): MemoryNode {
+        if (getLogicalKey(position) == key) {
+            handler.ptr.putInt(position + Int.SIZE_BYTES, value)
+            return MemoryNode(value, position, StoreType.INT)
+        } else {
+            // TODO: use unique exception
+            throw Exception("")
+        }
     }
 
     /**
@@ -105,14 +115,29 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
      *  | tag    | index of key           | index of any in stream         |
      *  +--------+------------------------+--------------------------------+
      */
-    fun <T> writeAny(key: String, value: T) {
+    fun <T> writeAny(key: String, value: T): MemoryNode {
+        if (handler.pos + 2 * Int.SIZE_BYTES >= handler.size) handler = PhysicalDataHandler("./EasyKV/${kvName}_chunk", handler.pos + Config.STREAM_DEFAULT_SIZE)
         val physicalKey = generatePhysicalKey(key, StoreType.ANY)
+        val position = handler.pos
         handler.ptr.putInt(physicalKey)
         handler.pos += Config.INT_SIZE
         val bytes = KryoUtils.serialize(value)
         val index = stream.writeBytes(bytes.size, bytes)
         handler.ptr.putInt(index)
         handler.pos += Config.INT_SIZE
+        return MemoryNode(value as Any, position, StoreType.ANY)
+    }
+
+    fun <T> reWriteAny(key: String, value: T, position: Int): MemoryNode {
+        if (getLogicalKey(position) == key) {
+            val bytes = KryoUtils.serialize(value)
+            val index = stream.writeBytes(bytes.size, bytes)
+            handler.ptr.putInt(position + Int.SIZE_BYTES, index)
+            return MemoryNode(value as Any, position, StoreType.ANY)
+        } else {
+            // TODO: use unique exception
+            throw Exception("")
+        }
     }
 
 
@@ -130,7 +155,25 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
         return physicalKey shr 24 and 0x0F
     }
 
-    fun loadAll(){
+    /**
+     * 逻辑删除
+     */
+    fun logicalRemove(position: Int) {
+        val physicalKey = handler.ptr.getInt(position)
+        handler.ptr.putInt(position, physicalKey and 0x7FFFFFFF)
+    }
+
+    /**
+     * 获取键的名称
+     */
+    fun getLogicalKey(position: Int): String {
+        val physicalKey = handler.ptr.getInt(position)
+        val keyIndex = physicalKey and 0xFFFFFF
+        return stream.readBytes(keyIndex).toAsciiString()
+    }
+
+    fun loadAllFromFile(): MutableMap<String, MemoryNode> {
+        val mMap = mutableMapOf<String, MemoryNode>()
         var p = 4
         val size = handler.getLogicSize()
         while (p < size) {
@@ -164,21 +207,7 @@ class Chunk(kvName: String, chunkSize: Long = Config.CHUNK_DEFAULT_SIZE) {
                 }
             }
         }
-        for(item in mMap) {
-            println("${item.key} : ${item.value}")
-        }
+        return mMap
     }
 
 }
-
-class a() {
-    val tt = 1
-    val t2 = "2332321"
-}
-fun main() {
-    val chunk = Chunk("test")
-    chunk.writeAny("a", a() as Any)
-    chunk.writeBool("bool", true)
-    chunk.loadAll()
-}
-
