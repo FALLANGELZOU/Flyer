@@ -1,55 +1,94 @@
 package flyer.easyKeyValue.physicalFile
 
-import flyer.easyKeyValue.Config
-import flyer.easyKeyValue.Config.GB
-import flyer.easyKeyValue.Config.MB
+import flyer.easyKeyValue.KVConf
 import java.io.RandomAccessFile
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 
 class PhysicalDataHandler(private val kvName: String, val size: Long) {
-    private var file = RandomAccessFile("$kvName.ekv", "rw")
-    private var fileChannel = file.channel
-    private var mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, Config.INT_SIZE.toLong(), size)
-
-    var pos = Config.INT_SIZE
+    private var mmap = Mmap(kvName, size)
+    private var expandCnt = 0
+    private val ptr: MappedByteBuffer get() = mmap.mappedByteBuffer.position(pos)
+    val writtenBytes: Int get() = mmap.mappedByteBuffer.getInt(0)
+    val fileSize: Long get() = mmap.fileSize
+    var pos = Int.SIZE_BYTES
         set(value) {
             field = value
-            mappedByteBuffer.putInt(0, value)
+            mmap.mappedByteBuffer.putInt(0, value)
         }
-    val ptr: MappedByteBuffer get() = mappedByteBuffer.position(pos)
 
+    private fun expand() {
+        expandCnt ++
+        mmap = Mmap(kvName, mmap.size + expandCnt * KVConf.EXPAND_BLOCK_SIZE)
+    }
 
-
-    /**
-     * 文件前四个字节为文件大小，int存储
-     */
-    private fun initLen() {
-        pos = mappedByteBuffer.getInt(0)
-        if (pos == 0) {
-            mappedByteBuffer.putInt(0, Config.INT_SIZE)
-            pos = Config.INT_SIZE
+    fun writeBytes(byteArray: ByteArray, position: Int? = null): Int {
+        while (byteArray.size + (position ?: pos) >= mmap.size) expand()
+        return if (position != null) {
+            mmap.mappedByteBuffer.put(position, byteArray)
+            position + byteArray.size
+        } else {
+            ptr.put(byteArray)
+            pos += byteArray.size
+            pos
         }
     }
 
-    /**
-     * 获取实际写入多少字节
-     */
-    fun getLogicSize(): Int {
-        return mappedByteBuffer.getInt(0)
+    fun readBytes(position: Int, size: Int): ByteArray {
+        while (size + position >= mmap.size) expand()
+        val bytes = ByteArray(size)
+        for (i in 0 until size) {
+            try {
+                bytes[i] = mmap.mappedByteBuffer.get(position + i)
+            }catch (e: Exception){
+                println(e)
+            }
+
+        }
+        return bytes
     }
 
-    /**
-     * 获取文件映射大小
-     */
-    fun getPhysicalSize(): Long {
-        return file.length()
+    fun writeInt(value: Int, position: Int? = null): Int {
+        while (Int.SIZE_BYTES + (position ?: pos) >= mmap.size) expand()
+        return if (position != null) {
+            mmap.mappedByteBuffer.putInt(position, value)
+            position + Int.SIZE_BYTES
+        } else {
+            ptr.putInt(value)
+            pos += Int.SIZE_BYTES
+            pos
+        }
     }
+
+    fun readInt(position: Int): Int {
+        while (Int.SIZE_BYTES + position >= mmap.size) expand()
+        return mmap.mappedByteBuffer.getInt(position)
+    }
+
+
+
 
     init {
-        initLen()
-        fileChannel.close()
-        file.close()
+        pos = mmap.mappedByteBuffer.getInt(0)
+        if (pos == 0) {
+            mmap.mappedByteBuffer.putInt(0, Int.SIZE_BYTES)
+            pos = Int.SIZE_BYTES
+        } else if(mmap.size <= pos) {
+            mmap = Mmap(kvName, pos.toLong())
+        }
+    }
+
+    inner class Mmap(kvName: String, val size: Long) {
+        private var file = RandomAccessFile("$kvName", "rw")
+        private var fileChannel = file.channel
+        var mappedByteBuffer: MappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_WRITE, KVConf.INT_SIZE.toLong(), size)
+        var fileSize = 0L
+        init {
+            fileSize = file.length()
+            fileChannel.close()
+            file.close()
+
+        }
     }
 }
 

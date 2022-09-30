@@ -42,6 +42,10 @@ object ReflectInvokeStrategy: MethodInvokeStrategy {
             FThreadMode.POSTING -> run {
                 function.call(subscriber, event)
             }
+
+            else -> {
+                function.call(subscriber, event)
+            }
         }
     }
 }
